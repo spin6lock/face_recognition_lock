@@ -36,7 +36,7 @@ def lock_screen():
     user32.LockWorkStation()
 
 
-def exit():
+def atexit():
     cv2.destroyAllWindows()
     if cap:
         cap.release()
@@ -45,7 +45,6 @@ def exit():
 
 def is_away_from_desk():
     global cap
-    cap = cv2.VideoCapture(0)
     _, image = cap.read()
     blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300), (104.0, 177.0, 123.0))
     model.setInput(blob)
@@ -59,12 +58,16 @@ def is_away_from_desk():
     return away
 
 def main():
+    global cap
+    cap = cv2.VideoCapture(0)
     while True:
         idle_time_seconds = get_idle_duration()
         if idle_time_seconds < IDLE_TIME:
+            time.sleep(INTERVAL)
             continue
         if is_away_from_desk():
             lock_screen()
+            atexit()
         else:
             cap.release()
         time.sleep(INTERVAL)
