@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import time
 import sys
+import logging
+from logging.handlers import RotatingFileHandler
+from multiprocessing import Process
 from ctypes import *
 
 # 下载链接：https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt
@@ -14,7 +17,28 @@ IDLE_TIME = 10
 CONFIDENCE = 0.5
 INTERVAL = 5
 cap = None
+log_filename = "debug.log"
 
+"""
+logging.basicConfig(
+                    filename=log_filename,
+                    filemode="a",
+                    format=
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+"""
+
+rotate_handler = RotatingFileHandler(log_filename,
+                    maxBytes=20*1024,
+                    backupCount=5)
+rotate_handler.setFormatter(logging.Formatter(
+                                        '%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                                        datefmt='%H:%M:%S',
+                                        ))
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+logger.addHandler(rotate_handler)
 
 class LASTINPUTINFO(Structure):
     _fields_ = [
@@ -34,9 +58,11 @@ def get_idle_duration():
 def lock_screen():
     user32 = windll.LoadLibrary('user32.dll')
     user32.LockWorkStation()
+    logger.info("lock_screen")
 
 
 def atexit():
+    logger.info("atexit")
     cv2.destroyAllWindows()
     if cap:
         cap.release()
@@ -61,16 +87,24 @@ def main():
     global cap
     cap = cv2.VideoCapture(0)
     while True:
-        idle_time_seconds = get_idle_duration()
-        if idle_time_seconds < IDLE_TIME:
+        try: 
+            idle_time_seconds = get_idle_duration()
+            if idle_time_seconds < IDLE_TIME:
+                time.sleep(INTERVAL)
+                logger.info("check period")
+                continue
+            if is_away_from_desk():
+                lock_screen()
+                atexit()
+            else:
+                cap.release()
             time.sleep(INTERVAL)
-            continue
-        if is_away_from_desk():
-            lock_screen()
-            atexit()
-        else:
-            cap.release()
-        time.sleep(INTERVAL)
+            logger.info("check period")
+        except Exception as ex:
+            logger.info("exception:", ex)
+
     
 if __name__ == "__main__":
-    main()
+    process = Process(target=main, daemon=True)
+    process.start()
+    process.join()
