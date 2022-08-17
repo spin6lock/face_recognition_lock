@@ -4,7 +4,7 @@ import time
 import sys
 import logging
 from logging.handlers import RotatingFileHandler
-from multiprocessing import Process
+import socket
 from ctypes import *
 
 # 下载链接：https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt
@@ -18,6 +18,7 @@ CONFIDENCE = 0.5
 INTERVAL = 5
 cap = None
 log_filename = "debug.log"
+DEFINED_PORT = 8888
 
 """
 logging.basicConfig(
@@ -29,7 +30,7 @@ logging.basicConfig(
 """
 
 rotate_handler = RotatingFileHandler(log_filename,
-                    maxBytes=20*1024,
+                    maxBytes=20*1024*1024,
                     backupCount=5)
 rotate_handler.setFormatter(logging.Formatter(
                                         '%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
@@ -58,11 +59,11 @@ def get_idle_duration():
 def lock_screen():
     user32 = windll.LoadLibrary('user32.dll')
     user32.LockWorkStation()
-    logger.info("lock_screen")
+    logger.debug("lock_screen")
 
 
 def atexit():
-    logger.info("atexit")
+    logger.debug("atexit")
     cv2.destroyAllWindows()
     if cap:
         cap.release()
@@ -71,6 +72,7 @@ def atexit():
 
 def is_away_from_desk():
     global cap
+    cap = cv2.VideoCapture(0)
     _, image = cap.read()
     blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300), (104.0, 177.0, 123.0))
     model.setInput(blob)
@@ -86,12 +88,13 @@ def is_away_from_desk():
 def main():
     global cap
     cap = cv2.VideoCapture(0)
+    cap.release()
     while True:
         try: 
             idle_time_seconds = get_idle_duration()
             if idle_time_seconds < IDLE_TIME:
                 time.sleep(INTERVAL)
-                logger.info("check period")
+                logger.debug("not idle check period")
                 continue
             if is_away_from_desk():
                 lock_screen()
@@ -99,12 +102,12 @@ def main():
             else:
                 cap.release()
             time.sleep(INTERVAL)
-            logger.info("check period")
+            logger.debug("check period")
         except Exception as ex:
-            logger.info("exception:", ex)
+            logger.debug("exception:", ex)
 
     
 if __name__ == "__main__":
-    process = Process(target=main, daemon=True)
-    process.start()
-    process.join()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('localhost', DEFINED_PORT))
+    main()
